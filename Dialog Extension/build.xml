@@ -33,6 +33,7 @@
 		<copy file="docs/Command Reference.rtf" tofile="release/Command Reference.rtf" />
 		
 		<zip destfile="release/Dialog Extension.zip" basedir="release" />
+		<zip destfile="release/dialog.zip" basedir="release/dialog" />
 		
 	</target>
 	

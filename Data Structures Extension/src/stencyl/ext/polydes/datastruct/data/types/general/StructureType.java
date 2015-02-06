@@ -10,7 +10,7 @@ import javax.swing.JComponent;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 
-import stencyl.ext.polydes.datastruct.data.core.CollectionPredicate;
+import stencyl.ext.polydes.common.collections.CollectionPredicate;
 import stencyl.ext.polydes.datastruct.data.folder.DataItem;
 import stencyl.ext.polydes.datastruct.data.structure.Structure;
 import stencyl.ext.polydes.datastruct.data.structure.StructureDefinition;

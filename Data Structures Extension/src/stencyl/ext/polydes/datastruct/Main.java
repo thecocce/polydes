@@ -2,7 +2,6 @@ package stencyl.ext.polydes.datastruct;
 
 import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -10,9 +9,9 @@ import javax.swing.JPanel;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.reflect.MethodUtils;
 
 import stencyl.core.lib.Game;
+import stencyl.ext.polydes.common.ext.GameExtension;
 import stencyl.ext.polydes.datastruct.data.core.Images;
 import stencyl.ext.polydes.datastruct.data.structure.StructureDefinitions;
 import stencyl.ext.polydes.datastruct.data.structure.Structures;
@@ -30,23 +29,18 @@ import stencyl.sw.editors.snippet.designer.Definition;
 import stencyl.sw.editors.snippet.designer.Definitions;
 import stencyl.sw.ext.BaseExtension;
 import stencyl.sw.ext.OptionsPanel;
+import stencyl.sw.util.FileHelper;
 import stencyl.sw.util.Loader;
 import stencyl.sw.util.Locations;
 
-public class Main extends BaseExtension
+public class Main extends GameExtension
 {
 	private static Main instance;
 	
 	private static String dataFolderName = "[ext] data structures";
 	
-	public static File extFolder;
-	public static File defsFolder;
-	public static File dataFolder;
-	
 	public ArrayList<DataTypeExtension> dataTypeExtensions;
 	public ArrayList<DataStructureExtension> dataStructureExtensions;
-	
-	private static boolean gameOpen;
 	
 	public static boolean forceUpdateData = false;
 	
@@ -71,7 +65,7 @@ public class Main extends BaseExtension
 		description = "Create and Manage Data Structures.";
 		authorName = "Justin Espedal";
 		website = "http://dialog.justin.espedaladventures.com/";
-		internalVersion = 2;
+		internalVersion = 3;
 		version = "1.1.0";
 		
 		isInMenu = true;
@@ -94,30 +88,33 @@ public class Main extends BaseExtension
 		
 		for(BaseExtension e : ExtensionManager.get().getExtensions().values())
 		{
+			if(e instanceof GameExtension)
+				continue;
+			
 			if(e instanceof DataTypeExtension)
 				dataTypeExtensions.add((DataTypeExtension) e);
 			if(e instanceof DataStructureExtension)
 				dataStructureExtensions.add((DataStructureExtension) e);
 			
-			if(e.getClassname().equals("ExtrasManagerExtension"))
-			{
-				try
-				{
-					MethodUtils.invokeMethod(e, "requestFolderOwnership", this, dataFolderName);
-				}
-				catch (NoSuchMethodException e1)
-				{
-					e1.printStackTrace();
-				}
-				catch (IllegalAccessException e1)
-				{
-					e1.printStackTrace();
-				}
-				catch (InvocationTargetException e1)
-				{
-					e1.printStackTrace();
-				}
-			}
+//			if(e.getClassname().equals("ExtrasManagerExtension"))
+//			{
+//				try
+//				{
+//					MethodUtils.invokeMethod(e, "requestFolderOwnership", this, dataFolderName);
+//				}
+//				catch (NoSuchMethodException e1)
+//				{
+//					e1.printStackTrace();
+//				}
+//				catch (IllegalAccessException e1)
+//				{
+//					e1.printStackTrace();
+//				}
+//				catch (InvocationTargetException e1)
+//				{
+//					e1.printStackTrace();
+//				}
+//			}
 		}
 	}
 	
@@ -135,7 +132,7 @@ public class Main extends BaseExtension
 	}
 	
 	@Override
-	public JPanel onGameCenterActivate()
+	public JPanel getMainPage()
 	{
 		return MainPage.get();
 	}
@@ -154,11 +151,8 @@ public class Main extends BaseExtension
 	private static String sourceDir;
 	
 	@Override
-	public void onGameSave(Game game)
+	public void onGameWithDataSaved(Game game)
 	{
-		if(!gameOpen)
-			return;
-		
 		try
 		{
 			StructureDefinitions.get().saveChanges();
@@ -176,9 +170,6 @@ public class Main extends BaseExtension
 		
 		if(Structures.root.isDirty())
 		{
-			if(dataFolder == null)
-				return;
-			
 			File temp = new File(Locations.getTemporaryDirectory() + File.separator + "data structures save");
 			temp.mkdirs();
 			boolean failedToSave = false;
@@ -188,9 +179,9 @@ public class Main extends BaseExtension
 			try{Structures.get().saveChanges(temp);}catch(IOException e){failedToSave = true; e.printStackTrace();}
 			if(!failedToSave)
 			{
-				try{FileUtils.deleteDirectory(dataFolder);}catch(IOException e){e.printStackTrace();}
-				dataFolder.mkdirs();
-				try{FileUtils.copyDirectory(temp, dataFolder);}catch(IOException e){e.printStackTrace();}
+				try{FileUtils.deleteDirectory(getExtrasFolder());}catch(IOException e){e.printStackTrace();}
+				getExtrasFolder().mkdirs();
+				try{FileUtils.copyDirectory(temp, getExtrasFolder());}catch(IOException e){e.printStackTrace();}
 			}
 		}
 		
@@ -223,23 +214,68 @@ public class Main extends BaseExtension
 	}
 	
 	@Override
-	public void onGameOpened(Game game)
+	public boolean isInstalledForGame(Game game)
 	{
-		gameOpen = true;
-		
-		extFolder = openFolder(Locations.getGameLocation(game) + "extras" + File.separator + dataFolderName + File.separator);
-		defsFolder = openFolder(extFolder, "defs" + File.separator);
-		dataFolder = openFolder(extFolder, "data" + File.separator);
+		return
+				//v2 installation
+				new File(Locations.getGameLocation(game) + "extras" + File.separator + dataFolderName + File.separator).exists() ||
+				//v3+ installation
+				(getDataFolder().exists() && getExtrasFolder().exists());
+	}
+	
+	@Override
+	public void onInstalledForGame(Game game)
+	{
+		File extrasFolder = getExtrasFolder();
+		extrasFolder.mkdirs();
+	}
+	
+	@Override
+	public void onUninstalledForGame(Game game)
+	{
+		FileHelper.delete(getExtrasFolder());
+		FileHelper.delete(getDataFolder());
+	}
+	
+	@Override
+	public void updateFromVersion(Game game, int fromVersion)
+	{
+		if(fromVersion <= 2)
+		{
+			File oldExtrasFolder = new File(Locations.getGameLocation(game) + "extras" + File.separator + dataFolderName + File.separator);
+			File oldExtrasDefsFolder = new File(oldExtrasFolder, "defs" + File.separator);
+			File oldExtrasDataFolder = new File(oldExtrasFolder, "data" + File.separator);
+			
+			File dataFolder = getDataFolder();
+			File extrasFolder = getExtrasFolder();
+			extrasFolder.mkdirs();
+			
+			try
+			{
+				FileUtils.moveDirectory(oldExtrasDataFolder, extrasFolder);
+				FileUtils.moveDirectory(oldExtrasDefsFolder, dataFolder);
+			}
+			catch (IOException e)
+			{
+				e.printStackTrace();
+			}
+		}
+	}
+	
+	@Override
+	public void onGameWithDataOpened(Game game)
+	{
+		File gameExtrasFolder = getExtrasFolder();
+		File gameDataFolder = getDataFolder();
 		
 		//Add all Types
-		
 		Types.addBasicTypes();
 		
 		for(DataTypeExtension ext : dataTypeExtensions)
 			for(DataType<?> type : ext.getDataTypes())
 				Types.addType(type);
 		
-		StructureDefinitions.get().addFolder(defsFolder, "My Structures");
+		StructureDefinitions.get().addFolder(gameDataFolder, "My Structures");
 		for(DataStructureExtension ext : dataStructureExtensions)
 			StructureDefinitions.get().addFolder(ext.getDefinitionsFolder(), ((BaseExtension) ext).getName());
 		
@@ -248,7 +284,7 @@ public class Main extends BaseExtension
 			DelayedInitialize.initPropPartial(type.xml, type, DelayedInitialize.CALL_FIELDS);
 		
 		Images.get().load(new File(Locations.getGameLocation(game), "extras"));
-		Structures.get().load(dataFolder);
+		Structures.get().load(gameExtrasFolder);
 		
 		//This is how extras are loaded, because they often rely on things that haven't been loaded
 		//yet when they're read in from XML files.
@@ -259,32 +295,9 @@ public class Main extends BaseExtension
 		Blocks.addDesignModeBlocks();
 	}
 	
-	public File openFolder(File f, String s)
-	{
-		return openFolder(new File(f, s));
-	}
-	
-	public File openFolder(String s)
-	{
-		return openFolder(new File(s));
-	}
-	
-	public File openFolder(File f)
-	{
-		if(!f.exists())
-			f.mkdirs();
-		return f;
-	}
-
 	@Override
-	public void onGameClosed(Game game)
+	public void onGameWithDataClosed(Game gamae)
 	{
-		super.onGameClosed(game);
-		
-		extFolder = null;
-		defsFolder = null;
-		dataFolder = null;
-		
 		MainPage.disposePages();
 		StructureDefinitions.dispose();
 		StructureCondition.dispose();
@@ -292,8 +305,6 @@ public class Main extends BaseExtension
 		Images.dispose();
 		Structures.dispose();
 		Blocks.dispose();
-		
-		gameOpen = false;
 	}
 	
 	@Override
@@ -346,15 +357,5 @@ public class Main extends BaseExtension
 	@Override
 	public void onUninstall()
 	{
-	}
-	
-	public String readInternalData()
-	{
-		return super.readData();
-	}
-	
-	public void writeInternalData(String data)
-	{
-		saveData(data);
 	}
 }
